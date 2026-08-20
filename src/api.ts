@@ -43,9 +43,11 @@ export function uploadFiles(path: string, entries: UploadEntry[]): Promise<void>
     const formData = new FormData();
     entries.forEach(({ file, relativePath }) => {
       // The 3rd arg to FormData.append becomes the file's `originalname` on the
-      // server. We use it to carry the relative path so multer can recreate the
-      // folder structure on disk.
-      formData.append('files', file, relativePath);
+      // server. We URL-encode the relative path so path separators survive the
+      // multipart encoder — some browsers strip everything before the last `/`
+      // in a filename, which would flatten folder uploads. The backend decodes
+      // it back to the original.
+      formData.append('files', file, encodeURIComponent(relativePath));
     });
 
     const xhr = new XMLHttpRequest();

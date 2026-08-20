@@ -104,7 +104,17 @@ const upload = multer({
         const baseDir = resolveSafePath(relPath);
 
         // Browsers often mis-encode non-ASCII names as latin1 in multipart.
-        const fixedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        const raw = Buffer.from(file.originalname, 'latin1').toString('utf8');
+
+        // The client URL-encodes the relative path so path separators survive
+        // browser multipart encoders (some strip the dir prefix from filenames).
+        // Fall back to the raw name if decoding fails for any reason.
+        let fixedName;
+        try {
+          fixedName = decodeURIComponent(raw);
+        } catch {
+          fixedName = raw;
+        }
 
         // Split into safe segments, dropping any traversal attempts.
         const segments = fixedName
