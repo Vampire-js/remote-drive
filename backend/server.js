@@ -221,31 +221,7 @@ if (fs.existsSync(distDir)) {
   });
 }
 
-// If cert.pem + key.pem exist next to server.js, serve HTTPS instead of HTTP.
-// PWA install / service worker registration requires a secure origin, so this
-// is what makes "Add to Home Screen" work from a phone accessing the server
-// over LAN by IP (which is otherwise treated as insecure by browsers).
-const certPath = path.join(__dirname, 'cert.pem');
-const keyPath = path.join(__dirname, 'key.pem');
-
-if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
-  const https = require('https');
-  const options = {
-    cert: fs.readFileSync(certPath),
-    key: fs.readFileSync(keyPath),
-  };
-  https.createServer(options, app).listen(PORT, '0.0.0.0', () => {
-    console.log(`My Drive server running at https://0.0.0.0:${PORT}`);
-  });
-} else {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`My Drive server running at http://0.0.0.0:${PORT}`);
-    console.log('  (No cert.pem/key.pem found — PWA install will not work over LAN.)');
-    console.log('  Generate a self-signed cert with:');
-    console.log('    openssl req -x509 -newkey rsa:2048 -nodes -sha256 \\');
-    console.log('      -keyout backend/key.pem -out backend/cert.pem \\');
-    console.log('      -days 365 -subj "/CN=My Drive" \\');
-    console.log('      -addext "subjectAltName=DNS:localhost,IP:0.0.0.0,IP:127.0.0.1"');
-  });
-}
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`My Drive server running at http://0.0.0.0:${PORT}`);
+});
 
