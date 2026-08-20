@@ -37,6 +37,8 @@ export const icons = {
   sort: svg(`<path d="M3 6h13"/><path d="M3 12h9"/><path d="M3 18h5"/><path d="m17 20 4-4-4-4"/><path d="M21 16H8"/>`),
   check: svg(`<polyline points="20 6 9 17 4 12"/>`, { size: 12, strokeWidth: 3 }),
   chevronDown: svg(`<polyline points="6 9 12 15 18 9"/>`, { size: 14 }),
+  chevronLeft: svg(`<polyline points="15 18 9 12 15 6"/>`, { size: 24, strokeWidth: 2 }),
+  chevronRight: svg(`<polyline points="9 18 15 12 9 6"/>`, { size: 24, strokeWidth: 2 }),
   arrowUp: svg(`<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>`, { size: 14, strokeWidth: 2.25 }),
   arrowDown: svg(`<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>`, { size: 14, strokeWidth: 2.25 }),
   search: svg(`<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>`, { size: 16 }),
@@ -70,6 +72,13 @@ export function iconFor(name: string, type: 'file' | 'folder'): string {
   const ext = name.split('.').pop()?.toLowerCase() ?? '';
   const key = EXT_TO_CATEGORY[ext] ?? 'fileGeneric';
   return icons[key];
+}
+
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif']);
+
+export function isImage(name: string): boolean {
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  return IMAGE_EXTS.has(ext);
 }
 
 export function joinPath(base: string, segment: string): string {

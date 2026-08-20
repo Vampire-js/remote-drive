@@ -9,7 +9,7 @@ import {
   downloadUrl,
   getStats,
 } from './api';
-import { formatBytes, formatDate, iconFor, joinPath, escapeHtml, icons } from './utils';
+import { formatBytes, formatDate, iconFor, joinPath, escapeHtml, icons, isImage } from './utils';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -180,6 +180,15 @@ function applyTheme(theme: 'light' | 'dark'): void {
     'aria-label',
     theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'
   );
+
+  // Sync the browser chrome / iOS status-bar color to match the active theme.
+  // We overwrite ALL existing `theme-color` metas (including the media-scoped
+  // ones from index.html) so the installed PWA follows the manual toggle too.
+  document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((el) => el.remove());
+  const meta = document.createElement('meta');
+  meta.name = 'theme-color';
+  meta.content = theme === 'dark' ? '#0a0a0a' : '#ffffff';
+  document.head.appendChild(meta);
 }
 
 applyTheme(getInitialTheme());
@@ -425,7 +434,7 @@ function renderGrid(): void {
     card.className = `card${isSelected ? ' card-selected' : ''}`;
     card.dataset.type = item.type;
     card.innerHTML = `
-      <div class="card-select" aria-hidden="true">${icons.check}</div>
+      <button class="card-select" type="button" aria-label="${isSelected ? 'Deselect' : 'Select'}">${icons.check}</button>
       <div class="card-icon card-icon-${item.type}">${iconFor(item.name, item.type)}</div>
       <div class="card-body">
         <div class="card-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
@@ -437,23 +446,42 @@ function renderGrid(): void {
     `;
 
     card.addEventListener('click', (e) => {
-      if ((e.target as HTMLElement).closest('.card-menu-btn')) return;
-      const isMulti = e.ctrlKey || e.metaKey;
-      if (isMulti) {
+      const target = e.target as HTMLElement;
+      if (target.closest('.card-menu-btn')) return;
+
+      // Explicit checkbox = toggle selection.
+      if (target.closest('.card-select')) {
         if (selected.has(itemPath)) selected.delete(itemPath);
         else selected.add(itemPath);
-      } else {
-        selected.clear();
-        selected.add(itemPath);
+        renderToolbar();
+        renderGrid();
+        return;
       }
-      renderToolbar();
-      renderGrid();
+
+      // Ctrl/Cmd click = multi-select (desktop convention).
+      if (e.ctrlKey || e.metaKey) {
+        if (selected.has(itemPath)) selected.delete(itemPath);
+        else selected.add(itemPath);
+        renderToolbar();
+        renderGrid();
+        return;
+      }
+
+      // If any items are already selected, treat plain click as add-to-selection
+      // (so mobile users can build up a selection without holding Ctrl).
+      if (selected.size > 0) {
+        if (selected.has(itemPath)) selected.delete(itemPath);
+        else selected.add(itemPath);
+        renderToolbar();
+        renderGrid();
+        return;
+      }
+
+      // Otherwise: open.
+      openItem(item);
     });
 
-    card.addEventListener('dblclick', () => {
-      if (item.type === 'folder') loadFolder(itemPath);
-      else window.open(downloadUrl(itemPath), '_blank');
-    });
+    card.addEventListener('dblclick', () => openItem(item));
 
     const menuBtn = card.querySelector<HTMLButtonElement>('.card-menu-btn')!;
     menuBtn.addEventListener('click', (e) => {
@@ -474,6 +502,157 @@ document.getElementById('drop-zone')!.addEventListener('click', (e) => {
     }
   }
 });
+
+function openItem(item: DriveItem): void {
+  const itemPath = joinPath(currentPath, item.name);
+  if (item.type === 'folder') {
+    loadFolder(itemPath);
+    return;
+  }
+  if (isImage(item.name)) {
+    const images = currentItems.filter((i) => i.type === 'file' && isImage(i.name));
+    const index = images.findIndex((i) => i.name === item.name);
+    openImageViewer(images, Math.max(0, index));
+    return;
+  }
+  window.open(downloadUrl(itemPath), '_blank');
+}
+
+// ============================================================
+// Image viewer (in-app lightbox with swipe / keyboard nav)
+// ============================================================
+
+let imageViewerCleanup: (() => void) | null = null;
+
+function openImageViewer(images: DriveItem[], startIndex: number): void {
+  if (imageViewerCleanup) imageViewerCleanup();
+  if (images.length === 0) return;
+
+  let index = startIndex;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'viewer-overlay';
+  overlay.innerHTML = `
+    <header class="viewer-header">
+      <div class="viewer-title" id="viewer-title"></div>
+      <div class="viewer-actions">
+        <span class="viewer-counter" id="viewer-counter"></span>
+        <a class="btn btn-icon btn-ghost viewer-btn" id="viewer-download" href="#" target="_blank" rel="noopener" aria-label="Download">${icons.download}</a>
+        <button class="btn btn-icon btn-ghost viewer-btn" id="viewer-close" type="button" aria-label="Close">${icons.close}</button>
+      </div>
+    </header>
+    <button class="viewer-nav viewer-prev" id="viewer-prev" type="button" aria-label="Previous">${icons.chevronLeft}</button>
+    <div class="viewer-stage" id="viewer-stage">
+      <div class="viewer-spinner"><div class="spinner"></div></div>
+      <img class="viewer-image" id="viewer-image" alt="" />
+    </div>
+    <button class="viewer-nav viewer-next" id="viewer-next" type="button" aria-label="Next">${icons.chevronRight}</button>
+  `;
+  document.body.appendChild(overlay);
+  document.body.classList.add('no-scroll');
+
+  const img = overlay.querySelector<HTMLImageElement>('#viewer-image')!;
+  const spinner = overlay.querySelector<HTMLDivElement>('.viewer-spinner')!;
+  const title = overlay.querySelector<HTMLDivElement>('#viewer-title')!;
+  const counter = overlay.querySelector<HTMLSpanElement>('#viewer-counter')!;
+  const dl = overlay.querySelector<HTMLAnchorElement>('#viewer-download')!;
+  const prev = overlay.querySelector<HTMLButtonElement>('#viewer-prev')!;
+  const next = overlay.querySelector<HTMLButtonElement>('#viewer-next')!;
+
+  function show(newIndex: number): void {
+    index = ((newIndex % images.length) + images.length) % images.length;
+    const item = images[index];
+    const itemPath = joinPath(currentPath, item.name);
+    img.classList.remove('loaded');
+    spinner.hidden = false;
+    img.src = downloadUrl(itemPath);
+    img.alt = item.name;
+    title.textContent = item.name;
+    counter.textContent = images.length > 1 ? `${index + 1} / ${images.length}` : '';
+    dl.href = downloadUrl(itemPath);
+    dl.setAttribute('download', item.name);
+    prev.disabled = images.length < 2;
+    next.disabled = images.length < 2;
+  }
+
+  img.addEventListener('load', () => {
+    spinner.hidden = true;
+    img.classList.add('loaded');
+  });
+  img.addEventListener('error', () => {
+    spinner.hidden = true;
+  });
+
+  const close = (): void => {
+    if (!imageViewerCleanup) return;
+    imageViewerCleanup();
+  };
+
+  prev.addEventListener('click', (e) => {
+    e.stopPropagation();
+    show(index - 1);
+  });
+  next.addEventListener('click', (e) => {
+    e.stopPropagation();
+    show(index + 1);
+  });
+  overlay.querySelector('#viewer-close')!.addEventListener('click', close);
+
+  // Click on empty backdrop area = close. Ignore clicks on the image itself
+  // (so the user can select/interact) and on the controls.
+  overlay.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (
+      target === overlay ||
+      target.classList.contains('viewer-stage') ||
+      target.classList.contains('viewer-header')
+    ) {
+      close();
+    }
+  });
+
+  // Keyboard navigation
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowLeft' && images.length > 1) show(index - 1);
+    else if (e.key === 'ArrowRight' && images.length > 1) show(index + 1);
+  };
+  document.addEventListener('keydown', onKey);
+
+  // Touch swipe navigation
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let swiping = false;
+  const stage = overlay.querySelector<HTMLDivElement>('#viewer-stage')!;
+  stage.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    swiping = true;
+  }, { passive: true });
+  stage.addEventListener('touchend', (e) => {
+    if (!swiping) return;
+    swiping = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStartX;
+    const dy = t.clientY - touchStartY;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+      if (dx > 0) show(index - 1);
+      else show(index + 1);
+    } else if (dy < -80 && Math.abs(dy) > Math.abs(dx)) {
+      close();
+    }
+  }, { passive: true });
+
+  imageViewerCleanup = () => {
+    document.removeEventListener('keydown', onKey);
+    overlay.remove();
+    document.body.classList.remove('no-scroll');
+    imageViewerCleanup = null;
+  };
+
+  show(index);
+}
 
 // ============================================================
 // Item context menu (three-dots on each card)
@@ -832,3 +1011,18 @@ window.addEventListener('dragend', hideDragOverlay);
 
 loadFolder('');
 refreshStats();
+
+// ============================================================
+// PWA service worker registration
+// ============================================================
+
+// Only register in production. During `vite dev` the service worker would
+// happily cache dev bundles and break HMR / cause stale reloads.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Registration failing (e.g. served over http on a non-localhost host)
+      // is not fatal — the app still works, just without offline support.
+    });
+  });
+}
