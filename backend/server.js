@@ -92,23 +92,47 @@ app.post('/api/folders', async (req, res) => {
   }
 });
 
-// Upload one or more files into a folder (target folder via ?path=)
+// Upload one or more files into a folder (target folder via ?path=).
+// The client encodes each file's relative path (for folder uploads) in the
+// FormData filename, e.g. "photos/vacation/img.jpg". We split that into a
+// destination subdirectory (created on the fly) and the final leaf filename.
 const upload = multer({
   storage: multer.diskStorage({
-    destination: (req, _file, cb) => {
+    destination: (req, file, cb) => {
       try {
         const relPath = req.query.path || '';
-        const dir = resolveSafePath(relPath);
-        fs.mkdirSync(dir, { recursive: true });
-        cb(null, dir);
+        const baseDir = resolveSafePath(relPath);
+
+        // Browsers often mis-encode non-ASCII names as latin1 in multipart.
+        const fixedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+
+        // Split into safe segments, dropping any traversal attempts.
+        const segments = fixedName
+          .replace(/\\/g, '/')
+          .split('/')
+          .filter((s) => s && s !== '.' && s !== '..')
+          .map(sanitizeName);
+
+        const dirSegments = segments.slice(0, -1);
+        const targetDir = path.join(baseDir, ...dirSegments);
+
+        // Re-validate the resolved path stays inside STORAGE_ROOT.
+        const rootWithSep = STORAGE_ROOT + path.sep;
+        if (targetDir !== STORAGE_ROOT && !targetDir.startsWith(rootWithSep) && !targetDir.startsWith(baseDir)) {
+          return cb(new Error('Invalid path'));
+        }
+
+        fs.mkdirSync(targetDir, { recursive: true });
+
+        // Stash the leaf filename for the filename() callback below.
+        file._finalName = segments[segments.length - 1] || sanitizeName(fixedName);
+        cb(null, targetDir);
       } catch (err) {
         cb(err);
       }
     },
     filename: (_req, file, cb) => {
-      // Multer/browsers often mis-encode non-ASCII names as latin1.
-      const fixedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-      cb(null, sanitizeName(fixedName));
+      cb(null, file._finalName || sanitizeName(file.originalname));
     },
   }),
   limits: { fileSize: 5 * 1024 * 1024 * 1024 }, // 5 GB per file

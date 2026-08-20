@@ -28,10 +28,25 @@ export function createFolder(path: string, name: string): Promise<void> {
   }).then((res) => handle<void>(res));
 }
 
-export function uploadFiles(path: string, files: FileList | File[]): Promise<void> {
+export interface UploadEntry {
+  file: File;
+  /**
+   * Relative path (forward-slash separated) under the target folder, including
+   * the file's own name. For flat file uploads this is just the file name;
+   * for folder uploads it preserves the nested structure, e.g. "sub/dir/pic.jpg".
+   */
+  relativePath: string;
+}
+
+export function uploadFiles(path: string, entries: UploadEntry[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
-    Array.from(files).forEach((file) => formData.append('files', file));
+    entries.forEach(({ file, relativePath }) => {
+      // The 3rd arg to FormData.append becomes the file's `originalname` on the
+      // server. We use it to carry the relative path so multer can recreate the
+      // folder structure on disk.
+      formData.append('files', file, relativePath);
+    });
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${BASE}/upload?path=${encodeURIComponent(path)}`);

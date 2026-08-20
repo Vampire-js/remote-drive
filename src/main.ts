@@ -1,5 +1,6 @@
 import './style.css';
 import type { DriveItem } from './types';
+import type { UploadEntry } from './api';
 import {
   listItems,
   createFolder,
@@ -31,6 +32,7 @@ app.innerHTML = `
             <button role="menuitem" type="button" data-action="new-folder">${icons.folderPlus}<span>New folder</span></button>
             <div class="dropdown-separator"></div>
             <button role="menuitem" type="button" data-action="upload-files">${icons.upload}<span>File upload</span></button>
+            <button role="menuitem" type="button" data-action="upload-folder">${icons.upload}<span>Folder upload</span></button>
           </div>
         </div>
         <nav class="nav">
@@ -86,6 +88,7 @@ app.innerHTML = `
     </div>
 
     <input id="file-input" type="file" multiple hidden />
+    <input id="folder-input" type="file" multiple hidden webkitdirectory directory />
     <div id="toast-container" class="toast-container"></div>
     <div id="modal-root"></div>
   </div>
@@ -878,12 +881,81 @@ function showToast(message: string, type: 'info' | 'error' = 'info'): void {
 // Uploads
 // ============================================================
 
-async function handleUpload(files: FileList | File[]): Promise<void> {
-  const list = Array.from(files);
-  if (list.length === 0) return;
-  showToast(`Uploading ${list.length} file${list.length > 1 ? 's' : ''}…`);
+// Recursively walk a directory entry from a drag-and-drop DataTransfer,
+// collecting every file with its relative path (e.g. "photos/vacation/img.jpg").
+// Uses the legacy but broadly-supported `webkitGetAsEntry` API.
+function readEntry(entry: FileSystemEntry, pathPrefix: string): Promise<UploadEntry[]> {
+  if (entry.isFile) {
+    return new Promise((resolve, reject) => {
+      (entry as FileSystemFileEntry).file(
+        (file) => resolve([{ file, relativePath: pathPrefix + file.name }]),
+        reject
+      );
+    });
+  }
+
+  const dirReader = (entry as FileSystemDirectoryEntry).createReader();
+  const childPrefix = pathPrefix + entry.name + '/';
+
+  // `readEntries` may return the children in multiple batches — call until empty.
+  const readAllEntries = (): Promise<FileSystemEntry[]> =>
+    new Promise((resolve, reject) => {
+      const all: FileSystemEntry[] = [];
+      const readBatch = (): void => {
+        dirReader.readEntries((batch) => {
+          if (batch.length === 0) resolve(all);
+          else {
+            all.push(...batch);
+            readBatch();
+          }
+        }, reject);
+      };
+      readBatch();
+    });
+
+  return readAllEntries()
+    .then((children) => Promise.all(children.map((c) => readEntry(c, childPrefix))))
+    .then((results) => results.flat());
+}
+
+async function collectFromDataTransfer(dt: DataTransfer): Promise<UploadEntry[]> {
+  const items = Array.from(dt.items).filter((i) => i.kind === 'file');
+  if (items.length === 0) return [];
+
+  // Only walk the entry tree when we actually have folders to descend into.
+  // For flat multi-file drops, `dt.files` is faster and doesn't need the async
+  // reader gymnastics.
+  const entries = items
+    .map((item) => (item.webkitGetAsEntry ? item.webkitGetAsEntry() : null))
+    .filter((e): e is FileSystemEntry => e !== null);
+
+  const hasDirectory = entries.some((e) => e.isDirectory);
+  if (!hasDirectory) {
+    return Array.from(dt.files).map((file) => ({ file, relativePath: file.name }));
+  }
+
+  const nested = await Promise.all(entries.map((e) => readEntry(e, '')));
+  return nested.flat();
+}
+
+// Files picked via <input webkitdirectory> come with a `webkitRelativePath`
+// like "myFolder/sub/pic.jpg" — perfect as-is.
+function entriesFromInputFolder(files: FileList): UploadEntry[] {
+  return Array.from(files).map((file) => ({
+    file,
+    relativePath: file.webkitRelativePath || file.name,
+  }));
+}
+
+function entriesFromInputFiles(files: FileList): UploadEntry[] {
+  return Array.from(files).map((file) => ({ file, relativePath: file.name }));
+}
+
+async function handleUpload(entries: UploadEntry[]): Promise<void> {
+  if (entries.length === 0) return;
+  showToast(`Uploading ${entries.length} file${entries.length > 1 ? 's' : ''}…`);
   try {
-    await uploadFiles(currentPath, list);
+    await uploadFiles(currentPath, entries);
     showToast('Upload complete');
     loadFolder(currentPath);
     refreshStats();
@@ -901,6 +973,7 @@ const newMenu = document.getElementById('new-menu')!;
 createDropdown(newBtn, newMenu);
 
 const fileInput = document.getElementById('file-input') as HTMLInputElement;
+const folderInput = document.getElementById('folder-input') as HTMLInputElement;
 
 newMenu.querySelector('[data-action="new-folder"]')!.addEventListener('click', async () => {
   const name = await openPromptModal({
@@ -923,9 +996,18 @@ newMenu.querySelector('[data-action="upload-files"]')!.addEventListener('click',
   fileInput.click();
 });
 
+newMenu.querySelector('[data-action="upload-folder"]')!.addEventListener('click', () => {
+  folderInput.click();
+});
+
 fileInput.addEventListener('change', () => {
-  if (fileInput.files) handleUpload(fileInput.files);
+  if (fileInput.files) handleUpload(entriesFromInputFiles(fileInput.files));
   fileInput.value = '';
+});
+
+folderInput.addEventListener('change', () => {
+  if (folderInput.files) handleUpload(entriesFromInputFolder(folderInput.files));
+  folderInput.value = '';
 });
 
 document.getElementById('search-input')!.addEventListener('input', () => renderGrid());
@@ -1001,8 +1083,11 @@ window.addEventListener('drop', (e) => {
   e.preventDefault();
   hideDragOverlay();
   // Only actually upload if the drop landed inside the content area.
-  if (dropZone.contains(e.target as Node) && e.dataTransfer?.files.length) {
-    handleUpload(e.dataTransfer.files);
+  if (dropZone.contains(e.target as Node) && e.dataTransfer) {
+    const dt = e.dataTransfer;
+    collectFromDataTransfer(dt)
+      .then((entries) => handleUpload(entries))
+      .catch((err) => showToast((err as Error).message, 'error'));
   }
 });
 
