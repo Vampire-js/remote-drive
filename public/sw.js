@@ -6,8 +6,18 @@
 //   - /api/* requests are always network-only. We never cache user data or
 //     directory listings; stale files would be worse than an error message.
 
-const CACHE = 'my-drive-shell-v1';
-const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg', '/icon-maskable.svg'];
+const CACHE = 'my-drive-shell-v2';
+const SHELL = [
+  '/',
+  '/index.html',
+  '/manifest.webmanifest',
+  '/icon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable-192.png',
+  '/icon-maskable-512.png',
+  '/apple-touch-icon.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

@@ -1,2 +1,4 @@
 node_modules/
 storage/
+cert.pem
+key.pem
