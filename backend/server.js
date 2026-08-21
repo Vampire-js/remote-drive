@@ -255,7 +255,9 @@ if (fs.existsSync(distDir)) {
   });
 }
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => { 
+  server.requestTimeout = 0;              // disable per-request cap
+  server.headersTimeout = 60_000;         // keep the header timeout at 60s
   console.log(`My Drive server running at http://0.0.0.0:${PORT}`);
 });
 
