@@ -4,6 +4,8 @@
 *{
   outline:none;
   -webkit-tap-highlight-color: transparent;
+   user-select: none;
+  -webkit-user-select: none;
 }
 :root {
   --background: 0 0% 100%;
