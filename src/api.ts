@@ -38,8 +38,27 @@ export interface UploadEntry {
   relativePath: string;
 }
 
-export function uploadFiles(path: string, entries: UploadEntry[]): Promise<void> {
-  return new Promise((resolve, reject) => {
+export interface UploadProgress {
+  /** Bytes transferred so far. */
+  loaded: number;
+  /** Total bytes to transfer, if known. */
+  total: number;
+  /** Fraction 0..1, or 0 if total is unknown. */
+  fraction: number;
+}
+
+export interface UploadHandle {
+  promise: Promise<void>;
+  abort(): void;
+}
+
+export function uploadFiles(
+  path: string,
+  entries: UploadEntry[],
+  onProgress?: (p: UploadProgress) => void
+): UploadHandle {
+  const xhr = new XMLHttpRequest();
+  const promise = new Promise<void>((resolve, reject) => {
     const formData = new FormData();
     entries.forEach(({ file, relativePath }) => {
       // The 3rd arg to FormData.append becomes the file's `originalname` on the
@@ -50,8 +69,19 @@ export function uploadFiles(path: string, entries: UploadEntry[]): Promise<void>
       formData.append('files', file, encodeURIComponent(relativePath));
     });
 
-    const xhr = new XMLHttpRequest();
     xhr.open('POST', `${BASE}/upload?path=${encodeURIComponent(path)}`);
+
+    if (onProgress) {
+      xhr.upload.addEventListener('progress', (ev) => {
+        const total = ev.lengthComputable ? ev.total : 0;
+        onProgress({
+          loaded: ev.loaded,
+          total,
+          fraction: total > 0 ? ev.loaded / total : 0,
+        });
+      });
+    }
+
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve();
@@ -66,8 +96,11 @@ export function uploadFiles(path: string, entries: UploadEntry[]): Promise<void>
       }
     };
     xhr.onerror = () => reject(new Error('Upload failed'));
+    xhr.onabort = () => reject(new Error('Upload cancelled'));
     xhr.send(formData);
   });
+
+  return { promise, abort: () => xhr.abort() };
 }
 
 export function deleteItem(path: string): Promise<void> {

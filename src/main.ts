@@ -89,6 +89,7 @@ app.innerHTML = `
 
     <input id="file-input" type="file" multiple hidden />
     <input id="folder-input" type="file" multiple hidden webkitdirectory directory />
+    <div id="upload-progress" class="upload-progress" hidden aria-live="polite"></div>
     <div id="toast-container" class="toast-container"></div>
     <div id="modal-root"></div>
   </div>
@@ -953,13 +954,68 @@ function entriesFromInputFiles(files: FileList): UploadEntry[] {
 
 async function handleUpload(entries: UploadEntry[]): Promise<void> {
   if (entries.length === 0) return;
-  showToast(`Uploading ${entries.length} file${entries.length > 1 ? 's' : ''}…`);
+  const totalBytes = entries.reduce((sum, e) => sum + e.file.size, 0);
+  const startedAt = performance.now();
+
+  const el = document.getElementById('upload-progress')!;
+  el.hidden = false;
+  el.innerHTML = `
+    <div class="upload-progress-header">
+      <div class="upload-progress-title" id="upload-progress-title"></div>
+      <button class="btn btn-icon btn-ghost upload-progress-cancel" id="upload-progress-cancel" type="button" aria-label="Cancel upload">${icons.close}</button>
+    </div>
+    <div class="upload-progress-bar"><div class="upload-progress-fill" id="upload-progress-fill"></div></div>
+    <div class="upload-progress-meta">
+      <span id="upload-progress-bytes"></span>
+      <span id="upload-progress-percent">0%</span>
+    </div>
+  `;
+
+  const titleEl = el.querySelector<HTMLDivElement>('#upload-progress-title')!;
+  const fillEl = el.querySelector<HTMLDivElement>('#upload-progress-fill')!;
+  const bytesEl = el.querySelector<HTMLSpanElement>('#upload-progress-bytes')!;
+  const percentEl = el.querySelector<HTMLSpanElement>('#upload-progress-percent')!;
+  const cancelBtn = el.querySelector<HTMLButtonElement>('#upload-progress-cancel')!;
+
+  const label =
+    entries.length === 1
+      ? entries[0].file.name
+      : `Uploading ${entries.length} file${entries.length > 1 ? 's' : ''}`;
+  titleEl.textContent = label;
+  bytesEl.textContent = `0 B of ${formatBytes(totalBytes)}`;
+
+  const handle = uploadFiles(currentPath, entries, ({ loaded, total, fraction }) => {
+    const knownTotal = total || totalBytes;
+    const pct = Math.min(100, Math.round(fraction * 100));
+    fillEl.style.width = `${pct}%`;
+    percentEl.textContent = `${pct}%`;
+
+    const elapsedSec = Math.max(0.1, (performance.now() - startedAt) / 1000);
+    const bytesPerSec = loaded / elapsedSec;
+    const speed = bytesPerSec > 0 ? `${formatBytes(bytesPerSec)}/s` : '';
+    bytesEl.textContent = speed
+      ? `${formatBytes(loaded)} of ${formatBytes(knownTotal)} · ${speed}`
+      : `${formatBytes(loaded)} of ${formatBytes(knownTotal)}`;
+  });
+
+  cancelBtn.addEventListener('click', () => handle.abort());
+
   try {
-    await uploadFiles(currentPath, entries);
+    await handle.promise;
+    fillEl.style.width = '100%';
+    percentEl.textContent = '100%';
+    titleEl.textContent = 'Upload complete';
+    bytesEl.textContent = formatBytes(totalBytes);
+    cancelBtn.hidden = true;
+    // Give the user a moment to see the completed state, then hide.
+    setTimeout(() => {
+      el.hidden = true;
+    }, 1500);
     showToast('Upload complete');
     loadFolder(currentPath);
     refreshStats();
   } catch (err) {
+    el.hidden = true;
     showToast((err as Error).message, 'error');
   }
 }

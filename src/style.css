@@ -953,6 +953,93 @@ button {
   pointer-events: none;
 }
 
+/* =========================================================================
+   Upload progress card
+   ========================================================================= */
+
+.upload-progress {
+  position: fixed;
+  bottom: calc(1.25rem + env(safe-area-inset-bottom));
+  right: calc(1.25rem + env(safe-area-inset-right));
+  left: auto;
+  width: min(22rem, calc(100vw - 2rem));
+  background: hsl(var(--popover));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 0.85rem 1rem 0.95rem;
+  z-index: 210;
+  animation: upload-progress-in 0.18s ease-out;
+}
+
+@keyframes upload-progress-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.upload-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.upload-progress-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.upload-progress-cancel {
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+}
+
+.upload-progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: hsl(var(--secondary));
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: hsl(var(--foreground));
+  border-radius: 999px;
+  transition: width 0.15s linear;
+}
+
+.upload-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .upload-progress {
+    left: calc(0.75rem + env(safe-area-inset-left));
+    right: calc(0.75rem + env(safe-area-inset-right));
+    width: auto;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+}
+
+
 .toast {
   background: hsl(var(--popover));
   color: hsl(var(--foreground));
