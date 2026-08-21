@@ -62,11 +62,31 @@ class MainActivity : Activity() {
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == FILE_CHOOSER_REQUEST) {
-            val uris = WebChromeClient.FileChooserParams.parseResult(resultCode, data)
-            fileChooserCallback?.onReceiveValue(uris)
-            fileChooserCallback = null
+        if (requestCode != FILE_CHOOSER_REQUEST) return
+
+        val cb = fileChooserCallback
+        fileChooserCallback = null
+
+        if (resultCode != Activity.RESULT_OK || data == null) {
+            cb?.onReceiveValue(null)
+            return
         }
+
+        // Manually unpack the result. When the user picks multiple files the
+        // system returns them in `clipData`; a single pick lands in `data`.
+        // Using FileChooserParams.parseResult() has been unreliable across
+        // vendor system pickers when we built the intent ourselves, so parse
+        // both cases explicitly.
+        val uris: Array<Uri>? = when {
+            data.clipData != null -> {
+                val clip = data.clipData!!
+                Array(clip.itemCount) { i -> clip.getItemAt(i).uri }
+            }
+            data.data != null -> arrayOf(data.data!!)
+            else -> null
+        }
+
+        cb?.onReceiveValue(uris)
     }
 
     @Suppress("SetJavaScriptEnabled")
@@ -109,8 +129,9 @@ class MainActivity : Activity() {
                 // Build our own intent instead of using createIntent(), so we can
                 // guarantee multi-select is on. Some system pickers ignore the
                 // multi-select hint from the WebView's default intent — this
-                // forces EXTRA_ALLOW_MULTIPLE when the <input> has `multiple`.
-                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                // forces EXTRA_ALLOW_MULTIPLE unconditionally, because every
+                // <input type="file"> in this app is `multiple`.
+                val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
                     addCategory(Intent.CATEGORY_OPENABLE)
                     type = "*/*"
                     val acceptTypes = fileChooserParams.acceptTypes
@@ -119,14 +140,13 @@ class MainActivity : Activity() {
                     if (acceptTypes.isNotEmpty()) {
                         putExtra(Intent.EXTRA_MIME_TYPES, acceptTypes)
                     }
-                    if (fileChooserParams.mode == FileChooserParams.MODE_OPEN_MULTIPLE) {
-                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                    }
+                    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                 }
+                val chooser = Intent.createChooser(intent, "Select files")
 
                 return try {
                     @Suppress("DEPRECATION")
-                    startActivityForResult(intent, FILE_CHOOSER_REQUEST)
+                    startActivityForResult(chooser, FILE_CHOOSER_REQUEST)
                     true
                 } catch (e: Exception) {
                     fileChooserCallback = null
