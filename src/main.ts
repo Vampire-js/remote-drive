@@ -8,9 +8,10 @@ import {
   deleteItem,
   renameItem,
   downloadUrl,
+  streamUrl,
   getStats,
 } from './api';
-import { formatBytes, formatDate, iconFor, joinPath, escapeHtml, icons, isImage } from './utils';
+import { formatBytes, formatDate, iconFor, joinPath, escapeHtml, icons, isVideo, isMedia } from './utils';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -641,24 +642,27 @@ function openItem(item: DriveItem): void {
     loadFolder(itemPath);
     return;
   }
-  if (isImage(item.name)) {
-    const images = currentItems.filter((i) => i.type === 'file' && isImage(i.name));
-    const index = images.findIndex((i) => i.name === item.name);
-    openImageViewer(images, Math.max(0, index));
+  if (isMedia(item.name)) {
+    // Collect all sibling media (images + videos) so the viewer can page
+    // through everything visually browsable in this folder.
+    const media = currentItems.filter((i) => i.type === 'file' && isMedia(i.name));
+    const index = media.findIndex((i) => i.name === item.name);
+    openMediaViewer(media, Math.max(0, index));
     return;
   }
   window.open(downloadUrl(itemPath), '_blank');
 }
 
 // ============================================================
-// Image viewer (in-app lightbox with swipe / keyboard nav)
+// Media viewer — handles images and videos in one overlay, with swipe /
+// keyboard navigation across a collection.
 // ============================================================
 
-let imageViewerCleanup: (() => void) | null = null;
+let mediaViewerCleanup: (() => void) | null = null;
 
-function openImageViewer(images: DriveItem[], startIndex: number): void {
-  if (imageViewerCleanup) imageViewerCleanup();
-  if (images.length === 0) return;
+function openMediaViewer(media: DriveItem[], startIndex: number): void {
+  if (mediaViewerCleanup) mediaViewerCleanup();
+  if (media.length === 0) return;
 
   let index = startIndex;
 
@@ -676,7 +680,8 @@ function openImageViewer(images: DriveItem[], startIndex: number): void {
     <button class="viewer-nav viewer-prev" id="viewer-prev" type="button" aria-label="Previous">${icons.chevronLeft}</button>
     <div class="viewer-stage" id="viewer-stage">
       <div class="viewer-spinner"><div class="spinner"></div></div>
-      <img class="viewer-image" id="viewer-image" alt="" />
+      <img class="viewer-image" id="viewer-image" alt="" hidden />
+      <video class="viewer-video" id="viewer-video" controls playsinline preload="metadata" hidden></video>
     </div>
     <button class="viewer-nav viewer-next" id="viewer-next" type="button" aria-label="Next">${icons.chevronRight}</button>
   `;
@@ -684,6 +689,7 @@ function openImageViewer(images: DriveItem[], startIndex: number): void {
   document.body.classList.add('no-scroll');
 
   const img = overlay.querySelector<HTMLImageElement>('#viewer-image')!;
+  const video = overlay.querySelector<HTMLVideoElement>('#viewer-video')!;
   const spinner = overlay.querySelector<HTMLDivElement>('.viewer-spinner')!;
   const title = overlay.querySelector<HTMLDivElement>('#viewer-title')!;
   const counter = overlay.querySelector<HTMLSpanElement>('#viewer-counter')!;
@@ -692,19 +698,46 @@ function openImageViewer(images: DriveItem[], startIndex: number): void {
   const next = overlay.querySelector<HTMLButtonElement>('#viewer-next')!;
 
   function show(newIndex: number): void {
-    index = ((newIndex % images.length) + images.length) % images.length;
-    const item = images[index];
+    index = ((newIndex % media.length) + media.length) % media.length;
+    const item = media[index];
     const itemPath = joinPath(currentPath, item.name);
-    img.classList.remove('loaded');
+
     spinner.hidden = false;
-    img.src = downloadUrl(itemPath);
-    img.alt = item.name;
+
+    // Always pause + tear down any previous video before switching, so the
+    // network fetch stops immediately (otherwise a paused 4K video keeps
+    // downloading in the background as you swipe past it).
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+
+    if (isVideo(item.name)) {
+      img.hidden = true;
+      img.classList.remove('loaded');
+      img.removeAttribute('src');
+
+      video.hidden = false;
+      video.src = streamUrl(itemPath);
+      // Autoplay on user-driven navigation. If autoplay is blocked (Safari
+      // without user gesture), the controls stay visible so the user can hit play.
+      video.play().catch(() => {
+        // silent — controls are shown
+      });
+    } else {
+      video.hidden = true;
+
+      img.hidden = false;
+      img.classList.remove('loaded');
+      img.src = streamUrl(itemPath);
+      img.alt = item.name;
+    }
+
     title.textContent = item.name;
-    counter.textContent = images.length > 1 ? `${index + 1} / ${images.length}` : '';
+    counter.textContent = media.length > 1 ? `${index + 1} / ${media.length}` : '';
     dl.href = downloadUrl(itemPath);
     dl.setAttribute('download', item.name);
-    prev.disabled = images.length < 2;
-    next.disabled = images.length < 2;
+    prev.disabled = media.length < 2;
+    next.disabled = media.length < 2;
   }
 
   img.addEventListener('load', () => {
@@ -714,10 +747,16 @@ function openImageViewer(images: DriveItem[], startIndex: number): void {
   img.addEventListener('error', () => {
     spinner.hidden = true;
   });
+  video.addEventListener('loadeddata', () => {
+    spinner.hidden = true;
+  });
+  video.addEventListener('error', () => {
+    spinner.hidden = true;
+  });
 
   const close = (): void => {
-    if (!imageViewerCleanup) return;
-    imageViewerCleanup();
+    if (!mediaViewerCleanup) return;
+    mediaViewerCleanup();
   };
 
   prev.addEventListener('click', (e) => {
@@ -730,57 +769,80 @@ function openImageViewer(images: DriveItem[], startIndex: number): void {
   });
   overlay.querySelector('#viewer-close')!.addEventListener('click', close);
 
-  // Click on empty backdrop area = close. Ignore clicks on the image itself
-  // (so the user can select/interact) and on the controls.
+  // Click on empty backdrop area = close. Ignore clicks on the media itself
+  // (so the user can interact with video controls) and on the header/nav.
   overlay.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
-    if (
-      target === overlay ||
-      target.classList.contains('viewer-stage') ||
-      target.classList.contains('viewer-header')
-    ) {
+    if (target === overlay || target.classList.contains('viewer-stage')) {
       close();
     }
   });
 
-  // Keyboard navigation
+  // Keyboard navigation. Left/right = navigate; space = play/pause video;
+  // Escape = close. Arrow keys are ignored while a video is playing and the
+  // user is likely scrubbing — but overriding only when NOT playing would be
+  // surprising, so we let them work always.
   const onKey = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') close();
-    else if (e.key === 'ArrowLeft' && images.length > 1) show(index - 1);
-    else if (e.key === 'ArrowRight' && images.length > 1) show(index + 1);
+    if (e.key === 'Escape') {
+      close();
+    } else if (e.key === 'ArrowLeft' && media.length > 1) {
+      show(index - 1);
+    } else if (e.key === 'ArrowRight' && media.length > 1) {
+      show(index + 1);
+    } else if (e.key === ' ' && !video.hidden) {
+      e.preventDefault();
+      if (video.paused) video.play().catch(() => {});
+      else video.pause();
+    }
   };
   document.addEventListener('keydown', onKey);
 
-  // Touch swipe navigation
+  // Touch swipe navigation. Disabled for videos so vertical scrolling on the
+  // video controls doesn't accidentally trigger navigation.
   let touchStartX = 0;
   let touchStartY = 0;
   let swiping = false;
   const stage = overlay.querySelector<HTMLDivElement>('#viewer-stage')!;
-  stage.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1) return;
-    touchStartX = e.touches[0].clientX;
-    touchStartY = e.touches[0].clientY;
-    swiping = true;
-  }, { passive: true });
-  stage.addEventListener('touchend', (e) => {
-    if (!swiping) return;
-    swiping = false;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - touchStartX;
-    const dy = t.clientY - touchStartY;
-    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 0) show(index - 1);
-      else show(index + 1);
-    } else if (dy < -80 && Math.abs(dy) > Math.abs(dx)) {
-      close();
-    }
-  }, { passive: true });
+  stage.addEventListener(
+    'touchstart',
+    (e) => {
+      if (e.touches.length !== 1) return;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      swiping = true;
+    },
+    { passive: true }
+  );
+  stage.addEventListener(
+    'touchend',
+    (e) => {
+      if (!swiping) return;
+      swiping = false;
+      // Ignore swipes that started on the video element — those are
+      // likely scrubbing/volume interactions with the native controls.
+      if ((e.target as HTMLElement).tagName === 'VIDEO') return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - touchStartX;
+      const dy = t.clientY - touchStartY;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 0) show(index - 1);
+        else show(index + 1);
+      } else if (dy < -80 && Math.abs(dy) > Math.abs(dx)) {
+        close();
+      }
+    },
+    { passive: true }
+  );
 
-  imageViewerCleanup = () => {
+  mediaViewerCleanup = () => {
     document.removeEventListener('keydown', onKey);
+    // Belt-and-suspenders: stop the video download when closing.
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
     overlay.remove();
     document.body.classList.remove('no-scroll');
-    imageViewerCleanup = null;
+    mediaViewerCleanup = null;
   };
 
   show(index);

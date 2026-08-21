@@ -121,6 +121,12 @@ export function downloadUrl(path: string): string {
   return `${BASE}/download?path=${encodeURIComponent(path)}`;
 }
 
+// Inline stream URL — supports HTTP range requests, no Content-Disposition,
+// so the browser plays the file inline. Use for <img>, <video>, <audio> sources.
+export function streamUrl(path: string): string {
+  return `${BASE}/stream?path=${encodeURIComponent(path)}`;
+}
+
 export function getStats(): Promise<DriveStats> {
   return fetch(`${BASE}/stats`).then((res) => handle<DriveStats>(res));
 }

@@ -75,10 +75,20 @@ export function iconFor(name: string, type: 'file' | 'folder'): string {
 }
 
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif']);
+const VIDEO_EXTS = new Set(['mp4', 'webm', 'mov', 'mkv', 'm4v', 'ogv']);
 
 export function isImage(name: string): boolean {
   const ext = name.split('.').pop()?.toLowerCase() ?? '';
   return IMAGE_EXTS.has(ext);
+}
+
+export function isVideo(name: string): boolean {
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  return VIDEO_EXTS.has(ext);
+}
+
+export function isMedia(name: string): boolean {
+  return isImage(name) || isVideo(name);
 }
 
 export function joinPath(base: string, segment: string): string {

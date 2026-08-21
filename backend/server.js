@@ -173,6 +173,31 @@ app.get('/api/download', async (req, res) => {
   }
 });
 
+// Stream a file with HTTP range support. Used by the in-app image and video
+// viewers. Unlike /api/download, this does NOT set Content-Disposition, so
+// the browser plays it inline instead of downloading. Range support is
+// essential for <video> seeking to work.
+app.get('/api/stream', async (req, res) => {
+  try {
+    const relPath = req.query.path || '';
+    const filePath = resolveSafePath(relPath);
+    const stat = await fsp.stat(filePath).catch(() => null);
+    if (!stat || !stat.isFile()) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // sendFile handles Accept-Ranges + Content-Range + partial content
+    // automatically, and picks the right Content-Type from the extension.
+    res.sendFile(filePath, {
+      headers: {
+        'Cache-Control': 'private, max-age=3600',
+      },
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // Rename a file or folder
 app.patch('/api/items', async (req, res) => {
   try {
