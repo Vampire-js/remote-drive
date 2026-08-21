@@ -1,4 +1,5 @@
 const path = require('path');
+const os = require('os');
 const fs = require('fs');
 const fsp = fs.promises;
 const express = require('express');
@@ -7,11 +8,18 @@ const multer = require('multer');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-const STORAGE_ROOT = path.join(__dirname, 'storage');
+
+// Where files are stored. Configurable via STORAGE_DIR so the data lives
+// outside the repo (survives fresh clones, easy to back up, easy to swap
+// to a mounted SD card / external drive). Default: ~/my-drive-storage.
+const STORAGE_ROOT = path.resolve(
+  process.env.STORAGE_DIR || path.join(os.homedir(), 'my-drive-storage')
+);
 
 if (!fs.existsSync(STORAGE_ROOT)) {
   fs.mkdirSync(STORAGE_ROOT, { recursive: true });
 }
+console.log(`Storage root: ${STORAGE_ROOT}`);
 
 app.use(cors());
 app.use(express.json());
