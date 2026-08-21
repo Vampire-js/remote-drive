@@ -379,6 +379,16 @@ button {
   left: 0;
 }
 
+/* Portal menu — lives at the body level (not inside a relative parent).
+   On desktop we position it via JS so it lands next to whichever anchor
+   opened it; on mobile it's a bottom sheet regardless (the media query
+   below overrides these). */
+.new-menu-portal {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
 .dropdown-menu > button {
   display: flex;
   align-items: center;
@@ -1148,10 +1158,6 @@ button {
     padding: 0.75rem 0.75rem 0.6rem;
   }
 
-  .card-menu-btn {
-    opacity: 1;
-  }
-
   .card-select::before {
     opacity: 1;
   }
@@ -1337,5 +1343,234 @@ button {
   .viewer-header {
     padding-left: calc(0.75rem + env(safe-area-inset-left));
     padding-right: calc(0.75rem + env(safe-area-inset-right));
+  }
+}
+
+/* =========================================================================
+   Floating Action Button (FAB) — mobile only
+   Materially inspired: circular, elevated, bottom-right. Replaces the
+   sidebar "New" button when the sidebar collapses into a drawer.
+   ========================================================================= */
+
+.fab {
+  position: fixed;
+  bottom: calc(1rem + env(safe-area-inset-bottom));
+  right: calc(1rem + env(safe-area-inset-right));
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  box-shadow:
+    0 3px 5px -1px rgb(0 0 0 / 0.2),
+    0 6px 10px 0 rgb(0 0 0 / 0.14),
+    0 1px 18px 0 rgb(0 0 0 / 0.12);
+  z-index: 40;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, bottom 0.25s ease, box-shadow 0.15s ease;
+}
+
+.fab:active {
+  transform: scale(0.94);
+}
+
+.fab > svg {
+  width: 24px;
+  height: 24px;
+}
+
+@media (max-width: 900px) {
+  .fab {
+    display: inline-flex;
+  }
+}
+
+/* Push the FAB up above the upload-progress card so they don't overlap
+   on narrow mobile viewports. */
+body.uploading .fab {
+  bottom: calc(7.5rem + env(safe-area-inset-bottom));
+}
+
+/* =========================================================================
+   Bottom-sheet scrim (mobile only)
+   A dimmed backdrop that appears behind any dropdown/menu that's been
+   promoted to a bottom sheet.
+   ========================================================================= */
+
+.sheet-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.5);
+  z-index: 65;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+@media (max-width: 640px) {
+  body.sheet-open .sheet-scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Every dropdown becomes a bottom sheet on mobile. Overrides the inline
+     top/left set by JS. */
+  .dropdown-menu {
+    position: fixed !important;
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0;
+    border-radius: 1rem 1rem 0 0;
+    padding: 0.5rem 0.75rem calc(1rem + env(safe-area-inset-bottom));
+    z-index: 70;
+    box-shadow: var(--shadow-lg);
+    animation: sheet-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Little handle at the top of every bottom sheet — a Material affordance
+     that says "this is a bottom sheet you can dismiss by tapping outside". */
+  .dropdown-menu::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: hsl(var(--border));
+    margin: 0.25rem auto 0.5rem;
+  }
+
+  /* Menu items get larger tap targets on mobile. */
+  .dropdown-menu > button {
+    padding: 0.85rem 0.75rem;
+    font-size: 0.95rem;
+    gap: 0.9rem;
+    min-height: 48px;
+  }
+
+  .dropdown-menu > button > svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .dropdown-separator {
+    margin: 0.4rem -0.25rem;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+}
+
+/* =========================================================================
+   Modals as bottom sheets on mobile
+   ========================================================================= */
+
+@media (max-width: 640px) {
+  .modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal {
+    width: 100%;
+    max-width: none;
+    border-radius: 1rem 1rem 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: sheet-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .modal::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: hsl(var(--border));
+    margin: 0.5rem auto 0;
+  }
+
+  .modal-header {
+    padding-top: 0.75rem;
+  }
+
+  .modal-footer {
+    padding-bottom: 1.25rem;
+  }
+}
+
+/* =========================================================================
+   Tap ripple — Material-style visual feedback on interactive elements.
+   Uses a subtle expanding highlight via ::after on :active. Purely CSS,
+   no JS. Only kicks in for touch/mobile — desktop still uses hover states.
+   ========================================================================= */
+
+@media (hover: none) and (pointer: coarse) {
+  .btn,
+  .nav-item,
+  .crumb,
+  .card,
+  .dropdown-menu > button,
+  .item-menu button,
+  .card-menu-btn {
+    position: relative;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* On touch devices, the three-dots button on each card is redundant
+     because we replace it with a long-press gesture. Hide it to reclaim
+     the tap area. */
+  .card-menu-btn {
+    display: none;
+  }
+
+  /* Card gets a subtle scale-down during long-press to acknowledge the
+     gesture before the action sheet appears. */
+  .card:active {
+    transform: scale(0.97);
+    transition: transform 0.15s ease;
+  }
+
+  .btn::after,
+  .nav-item::after,
+  .crumb::after,
+  .card::after,
+  .dropdown-menu > button::after,
+  .card-menu-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
+  .btn:active::after,
+  .nav-item:active::after,
+  .crumb:active::after,
+  .card:active::after,
+  .dropdown-menu > button:active::after,
+  .card-menu-btn:active::after {
+    opacity: 0.12;
+    transition: opacity 0s;
+  }
+
+  /* Guarantee touch-friendly 44x44 targets on mobile-critical controls. */
+  .icon-btn,
+  .card-menu-btn {
+    min-width: 44px;
+    min-height: 44px;
   }
 }

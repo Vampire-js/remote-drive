@@ -24,16 +24,10 @@ app.innerHTML = `
         </div>
       </div>
       <div class="sidebar-body">
-        <div class="new-btn-wrap dropdown-anchor">
+        <div class="new-btn-wrap">
           <button id="new-btn" class="btn btn-primary btn-full" type="button" aria-haspopup="menu" aria-expanded="false">
             ${icons.plus}<span>New</span>
           </button>
-          <div id="new-menu" class="dropdown-menu" role="menu" hidden>
-            <button role="menuitem" type="button" data-action="new-folder">${icons.folderPlus}<span>New folder</span></button>
-            <div class="dropdown-separator"></div>
-            <button role="menuitem" type="button" data-action="upload-files">${icons.upload}<span>File upload</span></button>
-            <button role="menuitem" type="button" data-action="upload-folder">${icons.upload}<span>Folder upload</span></button>
-          </div>
         </div>
         <nav class="nav">
           <button class="nav-item nav-item-active" type="button">${icons.hardDrive}<span>My Drive</span></button>
@@ -89,6 +83,16 @@ app.innerHTML = `
 
     <input id="file-input" type="file" multiple hidden />
     <input id="folder-input" type="file" multiple hidden webkitdirectory directory />
+    <button id="fab-new" class="fab" type="button" aria-label="New" aria-haspopup="menu" aria-expanded="false">
+      ${icons.plus}
+    </button>
+    <div id="new-menu" class="dropdown-menu new-menu-portal" role="menu" hidden>
+      <button role="menuitem" type="button" data-action="new-folder">${icons.folderPlus}<span>New folder</span></button>
+      <div class="dropdown-separator"></div>
+      <button role="menuitem" type="button" data-action="upload-files">${icons.upload}<span>File upload</span></button>
+      <button role="menuitem" type="button" data-action="upload-folder">${icons.upload}<span>Folder upload</span></button>
+    </div>
+    <div class="sheet-scrim" aria-hidden="true"></div>
     <div id="upload-progress" class="upload-progress" hidden aria-live="polite"></div>
     <div id="toast-container" class="toast-container"></div>
     <div id="modal-root"></div>
@@ -117,10 +121,40 @@ interface Dropdown {
   isOpen(): boolean;
 }
 
-function createDropdown(anchor: HTMLElement, menu: HTMLElement): Dropdown {
+// Position a body-level (portal) dropdown next to its trigger, clamped to
+// the viewport. Used when the menu can't be nested inside the trigger's own
+// relative-positioned parent (e.g. the FAB, which floats over content).
+function positionPortalMenu(menu: HTMLElement, anchor: HTMLElement): void {
+  // Reset then measure.
+  menu.style.top = '0px';
+  menu.style.left = '0px';
+  const rect = anchor.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  const pad = 8;
+
+  let top = rect.bottom + 6;
+  if (top + menuRect.height > window.innerHeight - pad) {
+    top = rect.top - menuRect.height - 6;
+  }
+  if (top < pad) top = pad;
+
+  let left = rect.right - menuRect.width;
+  if (left + menuRect.width > window.innerWidth - pad) {
+    left = window.innerWidth - menuRect.width - pad;
+  }
+  if (left < pad) left = pad;
+
+  menu.style.top = `${top + window.scrollY}px`;
+  menu.style.left = `${left + window.scrollX}px`;
+}
+
+function createDropdown(anchors: HTMLElement | HTMLElement[], menu: HTMLElement): Dropdown {
+  const anchorList = Array.isArray(anchors) ? anchors : [anchors];
+  const isMobile = (): boolean => window.matchMedia('(max-width: 640px)').matches;
+
   const onOutsideClick = (e: MouseEvent) => {
     const target = e.target as Node;
-    if (!menu.contains(target) && !anchor.contains(target)) close();
+    if (!menu.contains(target) && !anchorList.some((a) => a.contains(target))) close();
   };
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') close();
@@ -129,7 +163,21 @@ function createDropdown(anchor: HTMLElement, menu: HTMLElement): Dropdown {
   const open = (): void => {
     if (!menu.hidden) return;
     menu.hidden = false;
-    anchor.setAttribute('aria-expanded', 'true');
+    anchorList.forEach((a) => a.setAttribute('aria-expanded', 'true'));
+
+    // On mobile the menu is displayed as a bottom sheet (CSS positions it),
+    // with a scrim behind. On desktop, if the menu lives outside its trigger's
+    // relative parent (e.g. body-level portal like the FAB's menu), position
+    // it manually next to whichever anchor was clicked last.
+    if (isMobile()) {
+      document.body.classList.add('sheet-open');
+    } else if (menu.parentElement === document.body || menu.classList.contains('portal-menu')) {
+      const trigger =
+        (anchorList.find((a) => document.activeElement === a) as HTMLElement | undefined) ??
+        anchorList[0];
+      positionPortalMenu(menu, trigger);
+    }
+
     setTimeout(() => {
       document.addEventListener('click', onOutsideClick, true);
       document.addEventListener('keydown', onKey);
@@ -139,7 +187,8 @@ function createDropdown(anchor: HTMLElement, menu: HTMLElement): Dropdown {
   const close = (): void => {
     if (menu.hidden) return;
     menu.hidden = true;
-    anchor.setAttribute('aria-expanded', 'false');
+    anchorList.forEach((a) => a.setAttribute('aria-expanded', 'false'));
+    document.body.classList.remove('sheet-open');
     document.removeEventListener('click', onOutsideClick, true);
     document.removeEventListener('keydown', onKey);
   };
@@ -149,10 +198,12 @@ function createDropdown(anchor: HTMLElement, menu: HTMLElement): Dropdown {
     else close();
   };
 
-  anchor.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggle();
-  });
+  anchorList.forEach((a) =>
+    a.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggle();
+    })
+  );
 
   menu.addEventListener('click', (e) => {
     if ((e.target as HTMLElement).closest('[role="menuitem"], [data-menu-item]')) {
@@ -401,6 +452,79 @@ function renderSortControl(container: HTMLElement): void {
 // Grid
 // ============================================================
 
+const LONG_PRESS_MS = 500;
+const LONG_PRESS_MOVE_THRESHOLD = 10; // pixels
+
+// Attach touch-only long-press behavior: after `LONG_PRESS_MS` of a stationary
+// touch, `onLongPress` fires and the subsequent `click` on the same element
+// is suppressed. Cancels on move, touchend, touchcancel, or scroll.
+function attachLongPress(el: HTMLElement, onLongPress: () => void): void {
+  let timer: number | null = null;
+  let startX = 0;
+  let startY = 0;
+  let firedForThisTouch = false;
+
+  const cancel = (): void => {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+
+  el.addEventListener(
+    'touchstart',
+    (e) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
+      firedForThisTouch = false;
+      cancel();
+      timer = window.setTimeout(() => {
+        timer = null;
+        firedForThisTouch = true;
+        // Haptic feedback on Android (WebView proxies to Vibration API when
+        // permitted — no-op on iOS Safari, harmless).
+        if ('vibrate' in navigator) navigator.vibrate?.(15);
+        onLongPress();
+      }, LONG_PRESS_MS);
+    },
+    { passive: true }
+  );
+
+  el.addEventListener(
+    'touchmove',
+    (e) => {
+      if (e.touches.length !== 1) return cancel();
+      const t = e.touches[0];
+      if (
+        Math.abs(t.clientX - startX) > LONG_PRESS_MOVE_THRESHOLD ||
+        Math.abs(t.clientY - startY) > LONG_PRESS_MOVE_THRESHOLD
+      ) {
+        cancel();
+      }
+    },
+    { passive: true }
+  );
+
+  el.addEventListener('touchend', cancel);
+  el.addEventListener('touchcancel', cancel);
+
+  // If the long-press did fire, swallow the click event that touchend
+  // would otherwise synthesize afterward.
+  el.addEventListener(
+    'click',
+    (e) => {
+      if (firedForThisTouch) {
+        firedForThisTouch = false;
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    },
+    true
+  );
+}
+
 function sortItems(items: DriveItem[]): DriveItem[] {
   const sorted = [...items].sort((a, b) => {
     let cmp = 0;
@@ -492,6 +616,10 @@ function renderGrid(): void {
       e.stopPropagation();
       openItemMenu(menuBtn, item);
     });
+
+    // Long-press on touch devices opens the action sheet (Android convention).
+    // Also cancels the pending click so the item doesn't open+action-sheet.
+    attachLongPress(card, () => openItemMenu(card, item));
 
     grid.appendChild(card);
   });
@@ -674,6 +802,7 @@ function closeItemMenu(): void {
     itemMenuCloseListeners();
     itemMenuCloseListeners = null;
   }
+  document.body.classList.remove('sheet-open');
 }
 
 function openItemMenu(anchor: HTMLElement, item: DriveItem): void {
@@ -695,16 +824,24 @@ function openItemMenu(anchor: HTMLElement, item: DriveItem): void {
   document.body.appendChild(menu);
   openItemMenuEl = menu;
 
-  const rect = anchor.getBoundingClientRect();
-  const menuRect = menu.getBoundingClientRect();
-  let top = rect.bottom + 6;
-  let left = rect.right - menuRect.width;
-  if (left < 8) left = 8;
-  if (top + menuRect.height > window.innerHeight - 8) {
-    top = rect.top - menuRect.height - 6;
+  const isMobile = window.matchMedia('(max-width: 640px)').matches;
+  if (isMobile) {
+    // Mobile: menu is a bottom sheet (CSS handles the layout); we just add
+    // the scrim + prevent the inline positioning below.
+    document.body.classList.add('sheet-open');
+  } else {
+    // Desktop: position anchored below the trigger, clamped to the viewport.
+    const rect = anchor.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    let top = rect.bottom + 6;
+    let left = rect.right - menuRect.width;
+    if (left < 8) left = 8;
+    if (top + menuRect.height > window.innerHeight - 8) {
+      top = rect.top - menuRect.height - 6;
+    }
+    menu.style.top = `${top + window.scrollY}px`;
+    menu.style.left = `${left + window.scrollX}px`;
   }
-  menu.style.top = `${top + window.scrollY}px`;
-  menu.style.left = `${left + window.scrollX}px`;
 
   const itemPath = joinPath(currentPath, item.name);
 
@@ -959,6 +1096,7 @@ async function handleUpload(entries: UploadEntry[]): Promise<void> {
 
   const el = document.getElementById('upload-progress')!;
   el.hidden = false;
+  document.body.classList.add('uploading');
   el.innerHTML = `
     <div class="upload-progress-header">
       <div class="upload-progress-title" id="upload-progress-title"></div>
@@ -1010,12 +1148,14 @@ async function handleUpload(entries: UploadEntry[]): Promise<void> {
     // Give the user a moment to see the completed state, then hide.
     setTimeout(() => {
       el.hidden = true;
+      document.body.classList.remove('uploading');
     }, 1500);
     showToast('Upload complete');
     loadFolder(currentPath);
     refreshStats();
   } catch (err) {
     el.hidden = true;
+    document.body.classList.remove('uploading');
     showToast((err as Error).message, 'error');
   }
 }
@@ -1026,7 +1166,10 @@ async function handleUpload(entries: UploadEntry[]): Promise<void> {
 
 const newBtn = document.getElementById('new-btn')!;
 const newMenu = document.getElementById('new-menu')!;
-createDropdown(newBtn, newMenu);
+const fabBtn = document.getElementById('fab-new')!;
+// Both the sidebar "New" button (desktop) and the mobile FAB trigger the same
+// menu. On mobile the menu is styled as a bottom sheet via CSS.
+createDropdown([newBtn, fabBtn], newMenu);
 
 const fileInput = document.getElementById('file-input') as HTMLInputElement;
 const folderInput = document.getElementById('folder-input') as HTMLInputElement;

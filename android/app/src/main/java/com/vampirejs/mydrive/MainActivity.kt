@@ -105,9 +105,28 @@ class MainActivity : Activity() {
             ): Boolean {
                 fileChooserCallback?.onReceiveValue(null)
                 fileChooserCallback = filePathCallback
+
+                // Build our own intent instead of using createIntent(), so we can
+                // guarantee multi-select is on. Some system pickers ignore the
+                // multi-select hint from the WebView's default intent — this
+                // forces EXTRA_ALLOW_MULTIPLE when the <input> has `multiple`.
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "*/*"
+                    val acceptTypes = fileChooserParams.acceptTypes
+                        .filter { it.isNotBlank() }
+                        .toTypedArray()
+                    if (acceptTypes.isNotEmpty()) {
+                        putExtra(Intent.EXTRA_MIME_TYPES, acceptTypes)
+                    }
+                    if (fileChooserParams.mode == FileChooserParams.MODE_OPEN_MULTIPLE) {
+                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                    }
+                }
+
                 return try {
                     @Suppress("DEPRECATION")
-                    startActivityForResult(fileChooserParams.createIntent(), FILE_CHOOSER_REQUEST)
+                    startActivityForResult(intent, FILE_CHOOSER_REQUEST)
                     true
                 } catch (e: Exception) {
                     fileChooserCallback = null
