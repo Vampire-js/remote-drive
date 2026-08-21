@@ -125,7 +125,7 @@ class MainActivity : Activity() {
                 setDescription("Downloading from My Drive")
                 setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
                 setNotificationVisibility(
-                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFICATION_COMPLETED
+                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
                 )
             }
             (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
