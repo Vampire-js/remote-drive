@@ -155,7 +155,7 @@ while true; do
   fi
 
   AFTER="$(git rev-parse HEAD)"
-
+  npm i
   # --- root npm deps ---
   if changed_in "$BEFORE" "$AFTER" package.json package-lock.json; then
     log "root dependencies changed, running npm ci"
