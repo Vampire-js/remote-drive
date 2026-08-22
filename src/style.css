@@ -73,6 +73,166 @@
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
 }
 
+/* -----------------------------------------------------------------------
+   Additional dark palettes. Each variant only redefines color tokens;
+   the shadow ramp from `data-theme='dark'` above stays in effect for all
+   of them via the shared `[data-theme^='dark']` selector below.
+   ----------------------------------------------------------------------- */
+
+:root[data-theme^='dark'] {
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+}
+
+/* Slate — deep blue-gray, high contrast. Tailwind slate-based. */
+:root[data-theme='dark-slate'] {
+  --background: 222 47% 10%;
+  --foreground: 210 40% 96%;
+  --card: 222 47% 12%;
+  --popover: 222 47% 14%;
+  --primary: 210 40% 96%;
+  --primary-foreground: 222 47% 11%;
+  --secondary: 217 33% 20%;
+  --secondary-foreground: 210 40% 96%;
+  --muted: 217 33% 18%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 217 33% 22%;
+  --accent-foreground: 210 40% 96%;
+  --destructive: 0 62% 50%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 217 33% 20%;
+  --input: 217 33% 20%;
+  --ring: 215 20% 65%;
+}
+
+/* Nord — arctic palette. Muted, low-eye-strain, cool tones. */
+:root[data-theme='dark-nord'] {
+  --background: 220 16% 22%;
+  --foreground: 219 28% 88%;
+  --card: 222 16% 25%;
+  --popover: 222 16% 27%;
+  --primary: 213 32% 52%;
+  --primary-foreground: 220 16% 96%;
+  --secondary: 220 17% 32%;
+  --secondary-foreground: 219 28% 88%;
+  --muted: 220 17% 30%;
+  --muted-foreground: 218 27% 74%;
+  --accent: 193 43% 67%;
+  --accent-foreground: 220 16% 15%;
+  --destructive: 354 42% 56%;
+  --destructive-foreground: 220 16% 96%;
+  --border: 220 16% 32%;
+  --input: 220 16% 32%;
+  --ring: 193 43% 67%;
+}
+
+/* Dracula — vibrant purple/pink accents on near-black background. */
+:root[data-theme='dark-dracula'] {
+  --background: 231 15% 18%;
+  --foreground: 60 30% 96%;
+  --card: 232 14% 22%;
+  --popover: 232 14% 24%;
+  --primary: 326 100% 74%;
+  --primary-foreground: 231 15% 12%;
+  --secondary: 232 14% 28%;
+  --secondary-foreground: 60 30% 96%;
+  --muted: 232 14% 26%;
+  --muted-foreground: 225 27% 71%;
+  --accent: 265 89% 78%;
+  --accent-foreground: 231 15% 12%;
+  --destructive: 0 100% 67%;
+  --destructive-foreground: 60 30% 96%;
+  --border: 232 14% 31%;
+  --input: 232 14% 31%;
+  --ring: 326 100% 74%;
+}
+
+/* Rosé Pine — soho vibe, muted pinks and mauves. */
+:root[data-theme='dark-rose'] {
+  --background: 249 22% 12%;
+  --foreground: 245 50% 91%;
+  --card: 248 25% 15%;
+  --popover: 248 25% 17%;
+  --primary: 2 66% 75%;
+  --primary-foreground: 249 22% 12%;
+  --secondary: 248 15% 25%;
+  --secondary-foreground: 245 50% 91%;
+  --muted: 248 15% 22%;
+  --muted-foreground: 248 12% 68%;
+  --accent: 189 43% 73%;
+  --accent-foreground: 249 22% 12%;
+  --destructive: 343 76% 68%;
+  --destructive-foreground: 245 50% 91%;
+  --border: 248 15% 24%;
+  --input: 248 15% 24%;
+  --ring: 2 66% 75%;
+}
+
+/* Catppuccin Mocha — creamy pastel accents on a soft dark background. */
+:root[data-theme='dark-mocha'] {
+  --background: 240 21% 15%;
+  --foreground: 226 64% 88%;
+  --card: 240 21% 18%;
+  --popover: 240 21% 20%;
+  --primary: 267 84% 81%;
+  --primary-foreground: 240 21% 15%;
+  --secondary: 237 16% 27%;
+  --secondary-foreground: 226 64% 88%;
+  --muted: 237 16% 24%;
+  --muted-foreground: 228 24% 72%;
+  --accent: 189 71% 73%;
+  --accent-foreground: 240 21% 15%;
+  --destructive: 343 81% 75%;
+  --destructive-foreground: 240 21% 15%;
+  --border: 234 13% 31%;
+  --input: 234 13% 31%;
+  --ring: 267 84% 81%;
+}
+
+/* Solarized Dark — classic Ethan Schoonover palette. */
+:root[data-theme='dark-solarized'] {
+  --background: 192 100% 11%;
+  --foreground: 44 87% 94%;
+  --card: 192 81% 14%;
+  --popover: 192 81% 16%;
+  --primary: 175 59% 40%;
+  --primary-foreground: 44 87% 94%;
+  --secondary: 192 87% 19%;
+  --secondary-foreground: 44 87% 94%;
+  --muted: 192 87% 17%;
+  --muted-foreground: 180 7% 60%;
+  --accent: 45 100% 35%;
+  --accent-foreground: 44 87% 94%;
+  --destructive: 1 71% 52%;
+  --destructive-foreground: 44 87% 94%;
+  --border: 194 40% 23%;
+  --input: 194 40% 23%;
+  --ring: 175 59% 40%;
+}
+
+/* Midnight Ocean — deep blues, minimal saturation, comfortable at night. */
+:root[data-theme='dark-ocean'] {
+  --background: 217 71% 6%;
+  --foreground: 213 27% 92%;
+  --card: 217 60% 9%;
+  --popover: 217 60% 11%;
+  --primary: 199 89% 60%;
+  --primary-foreground: 217 71% 8%;
+  --secondary: 217 40% 18%;
+  --secondary-foreground: 213 27% 92%;
+  --muted: 217 40% 15%;
+  --muted-foreground: 215 20% 70%;
+  --accent: 172 66% 50%;
+  --accent-foreground: 217 71% 8%;
+  --destructive: 0 72% 55%;
+  --destructive-foreground: 213 27% 92%;
+  --border: 217 40% 18%;
+  --input: 217 40% 18%;
+  --ring: 199 89% 60%;
+}
+
 * {
   box-sizing: border-box;
   border-color: hsl(var(--border));
@@ -436,6 +596,49 @@ button {
 .menu-item-danger:hover {
   background: hsl(var(--destructive) / 0.1);
   color: hsl(var(--destructive));
+}
+
+/* Theme picker swatch — colored circle shown left of each theme name in the
+   theme selector menu. Colors are set inline per theme so we don't need one
+   CSS rule per theme. */
+.theme-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+  border: 1px solid rgb(0 0 0 / 0.15);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+  overflow: hidden;
+}
+
+/* Little accent dot inside the swatch so each palette is instantly
+   distinguishable at a glance. */
+.theme-swatch::after {
+  content: '';
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--swatch-accent, #fff);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.2);
+}
+
+/* Small non-interactive header used to group items inside a dropdown menu
+   (e.g. "Light" and "Dark" sections in the theme picker). */
+.dropdown-menu > .menu-section {
+  padding: 0.5rem 0.6rem 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+}
+.dropdown-menu > .menu-section:first-child {
+  padding-top: 0.25rem;
 }
 
 .menu-item-danger:hover > svg {

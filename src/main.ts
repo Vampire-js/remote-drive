@@ -55,7 +55,10 @@ app.innerHTML = `
           <input id="search-input" class="search-input" type="search" placeholder="Search in My Drive" />
         </div>
         <div class="topbar-right">
-          <button id="theme-toggle-btn" class="btn btn-icon btn-ghost" type="button" aria-label="Toggle theme"></button>
+          <div class="dropdown-anchor">
+            <button id="theme-toggle-btn" class="btn btn-icon btn-ghost" type="button" aria-label="Change theme" aria-haspopup="menu" aria-expanded="false"></button>
+            <div id="theme-menu" class="dropdown-menu dropdown-menu-right" role="menu" hidden></div>
+          </div>
         </div>
       </header>
 
@@ -221,39 +224,106 @@ function createDropdown(anchors: HTMLElement | HTMLElement[], menu: HTMLElement)
 // ============================================================
 
 const THEME_KEY = 'gdrive-theme';
-const themeToggleBtn = document.getElementById('theme-toggle-btn')!;
 
-function getInitialTheme(): 'light' | 'dark' {
+interface ThemeMeta {
+  id: string;
+  label: string;
+  mode: 'light' | 'dark';
+  // CSS colors used to paint the swatch preview in the menu. `bg` fills
+  // the swatch circle; `accent` is a small dot in the corner so each
+  // palette is instantly distinguishable at a glance.
+  bg: string;
+  accent: string;
+  // Value pushed into the <meta name="theme-color"> tag so the browser
+  // chrome / iOS status bar tracks the active theme.
+  themeColor: string;
+}
+
+const THEMES: ThemeMeta[] = [
+  { id: 'light',          label: 'Light',          mode: 'light', bg: '#ffffff', accent: '#18181b', themeColor: '#ffffff' },
+  { id: 'dark',           label: 'Zinc',           mode: 'dark',  bg: '#0a0a0a', accent: '#fafafa', themeColor: '#0a0a0a' },
+  { id: 'dark-slate',     label: 'Slate',          mode: 'dark',  bg: '#0f172a', accent: '#e2e8f0', themeColor: '#0f172a' },
+  { id: 'dark-nord',      label: 'Nord',           mode: 'dark',  bg: '#2e3440', accent: '#88c0d0', themeColor: '#2e3440' },
+  { id: 'dark-dracula',   label: 'Dracula',        mode: 'dark',  bg: '#282a36', accent: '#ff79c6', themeColor: '#282a36' },
+  { id: 'dark-rose',      label: 'Rosé Pine',      mode: 'dark',  bg: '#191724', accent: '#ebbcba', themeColor: '#191724' },
+  { id: 'dark-mocha',     label: 'Catppuccin',     mode: 'dark',  bg: '#1e1e2e', accent: '#cba6f7', themeColor: '#1e1e2e' },
+  { id: 'dark-solarized', label: 'Solarized',      mode: 'dark',  bg: '#002b36', accent: '#2aa198', themeColor: '#002b36' },
+  { id: 'dark-ocean',     label: 'Midnight Ocean', mode: 'dark',  bg: '#040d1f', accent: '#38bdf8', themeColor: '#040d1f' },
+];
+
+const themeToggleBtn = document.getElementById('theme-toggle-btn')!;
+const themeMenu = document.getElementById('theme-menu')!;
+
+function getInitialThemeId(): string {
   const saved = localStorage.getItem(THEME_KEY);
-  if (saved === 'light' || saved === 'dark') return saved;
+  if (saved && THEMES.some((t) => t.id === saved)) return saved;
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-function applyTheme(theme: 'light' | 'dark'): void {
-  document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem(THEME_KEY, theme);
-  themeToggleBtn.innerHTML = theme === 'dark' ? icons.sun : icons.moon;
-  themeToggleBtn.setAttribute(
-    'aria-label',
-    theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'
-  );
+function applyTheme(id: string): void {
+  const theme = THEMES.find((t) => t.id === id) ?? THEMES[0];
+  document.documentElement.setAttribute('data-theme', theme.id);
+  localStorage.setItem(THEME_KEY, theme.id);
+
+  // Trigger icon: sun for dark modes (click = switch), moon for light,
+  // palette for the picker itself. We keep the classic sun/moon cue since
+  // that's what users expect on a theme button.
+  themeToggleBtn.innerHTML = theme.mode === 'dark' ? icons.sun : icons.moon;
+  themeToggleBtn.setAttribute('aria-label', `Change theme (currently ${theme.label})`);
 
   // Sync the browser chrome / iOS status-bar color to match the active theme.
   // We overwrite ALL existing `theme-color` metas (including the media-scoped
-  // ones from index.html) so the installed PWA follows the manual toggle too.
+  // ones from index.html) so the installed PWA follows the manual selection.
   document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((el) => el.remove());
   const meta = document.createElement('meta');
   meta.name = 'theme-color';
-  meta.content = theme === 'dark' ? '#0a0a0a' : '#ffffff';
+  meta.content = theme.themeColor;
   document.head.appendChild(meta);
+
+  // Refresh checkmarks on the picker if it's already been rendered.
+  themeMenu.querySelectorAll<HTMLButtonElement>('[data-theme-id]').forEach((btn) => {
+    const active = btn.dataset.themeId === theme.id;
+    btn.classList.toggle('menu-item-active', active);
+    const trailing = btn.querySelector<HTMLSpanElement>('.menu-item-trailing');
+    if (trailing) trailing.innerHTML = active ? icons.check : '';
+  });
 }
 
-applyTheme(getInitialTheme());
+function renderThemeMenu(): void {
+  const groups: Array<{ heading: string; mode: 'light' | 'dark' }> = [
+    { heading: 'Light', mode: 'light' },
+    { heading: 'Dark', mode: 'dark' },
+  ];
+  const current = document.documentElement.getAttribute('data-theme') ?? 'light';
 
-themeToggleBtn.addEventListener('click', () => {
-  const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-  applyTheme(current === 'dark' ? 'light' : 'dark');
-});
+  themeMenu.innerHTML = groups
+    .map((group) => {
+      const items = THEMES.filter((t) => t.mode === group.mode)
+        .map((t) => {
+          const active = t.id === current;
+          const swatchStyle = `background:${t.bg};--swatch-accent:${t.accent};`;
+          return `<button role="menuitem" type="button" data-theme-id="${t.id}" class="${active ? 'menu-item-active' : ''}">
+            <span class="theme-swatch" style="${swatchStyle}" aria-hidden="true"></span>
+            <span>${escapeHtml(t.label)}</span>
+            <span class="menu-item-trailing">${active ? icons.check : ''}</span>
+          </button>`;
+        })
+        .join('');
+      return `<div class="menu-section">${group.heading}</div>${items}`;
+    })
+    .join('');
+
+  themeMenu.querySelectorAll<HTMLButtonElement>('[data-theme-id]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.themeId!;
+      applyTheme(id);
+    });
+  });
+}
+
+renderThemeMenu();
+applyTheme(getInitialThemeId());
+createDropdown(themeToggleBtn, themeMenu);
 
 // ============================================================
 // Data loading
