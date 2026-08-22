@@ -91,6 +91,10 @@ export function isMedia(name: string): boolean {
   return isImage(name) || isVideo(name);
 }
 
+export function isPdf(name: string): boolean {
+  return name.split('.').pop()?.toLowerCase() === 'pdf';
+}
+
 export function joinPath(base: string, segment: string): string {
   return base ? `${base}/${segment}` : segment;
 }

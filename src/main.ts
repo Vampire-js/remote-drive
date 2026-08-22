@@ -11,7 +11,8 @@ import {
   streamUrl,
   getStats,
 } from './api';
-import { formatBytes, formatDate, iconFor, joinPath, escapeHtml, icons, isVideo, isMedia } from './utils';
+import { formatBytes, formatDate, iconFor, joinPath, escapeHtml, icons, isVideo, isMedia, isPdf } from './utils';
+import { openPdfViewer } from './pdfViewer';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -648,6 +649,14 @@ function openItem(item: DriveItem): void {
     const media = currentItems.filter((i) => i.type === 'file' && isMedia(i.name));
     const index = media.findIndex((i) => i.name === item.name);
     openMediaViewer(media, Math.max(0, index));
+    return;
+  }
+  if (isPdf(item.name)) {
+    openPdfViewer({
+      title: item.name,
+      src: streamUrl(itemPath),
+      downloadUrl: downloadUrl(itemPath),
+    });
     return;
   }
   window.open(downloadUrl(itemPath), '_blank');

@@ -1356,6 +1356,95 @@ button {
 }
 
 /* =========================================================================
+   PDF viewer (in-app, full-screen, all screen sizes)
+   Reuses .viewer-overlay + .viewer-header from the media viewer, then adds
+   a scrollable stack of rendered <canvas> pages that fit the viewport
+   width and re-render on resize/zoom.
+   ========================================================================= */
+
+.pdf-viewer {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    'header'
+    'stage';
+}
+
+.pdf-scroll {
+  grid-area: stage;
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 0.75rem 0 calc(1.5rem + env(safe-area-inset-bottom));
+  background: rgb(20 20 20);
+}
+
+.pdf-pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 100%;
+  width: 100%;
+}
+
+.pdf-page {
+  background: #fff;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.4);
+  border-radius: 2px;
+  overflow: hidden;
+  max-width: 100%;
+  /* Wrapper's inline width/height are set at render time to reserve space. */
+}
+
+.pdf-page-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.pdf-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  text-align: center;
+  color: rgb(255 255 255 / 0.85);
+  font-size: 0.95rem;
+}
+
+/* Zoom +/- buttons use text glyphs; keep them the same footprint as icon
+   buttons and don't let the flexbox squash the header actions on narrow
+   phones. */
+.pdf-viewer .viewer-actions {
+  gap: 0.25rem;
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 480px) {
+  /* On phones, drop the zoom buttons — pinch-zoom + fit-to-width is
+     enough, and we need the header room for the title. */
+  .pdf-viewer #pdf-zoom-in,
+  .pdf-viewer #pdf-zoom-out {
+    display: none;
+  }
+
+  .pdf-scroll {
+    padding-top: 0.5rem;
+  }
+
+  .pdf-pages {
+    gap: 0.5rem;
+  }
+}
+
+/* =========================================================================
    Floating Action Button (FAB) — mobile only
    Materially inspired: circular, elevated, bottom-right. Replaces the
    sidebar "New" button when the sidebar collapses into a drawer.
