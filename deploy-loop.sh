@@ -155,30 +155,42 @@ while true; do
   fi
 
   AFTER="$(git rev-parse HEAD)"
-  npm i
+
   # --- root npm deps ---
-  if changed_in "$BEFORE" "$AFTER" package.json package-lock.json; then
+  # We install unconditionally when package.json changed OR when node_modules
+  # is missing (first deploy on a fresh checkout). `npm ci` is preferred for
+  # reproducibility but falls back to `npm install` if the lockfile is out of
+  # sync with package.json — otherwise a lockfile mismatch would silently
+  # skip the rebuild and leave the old dist/ in place.
+  if changed_in "$BEFORE" "$AFTER" package.json package-lock.json || [ ! -d node_modules ]; then
     log "root dependencies changed, running npm ci"
     if ! npm ci; then
-      log "npm ci failed at repo root, aborting this cycle"
-      sleep "$INTERVAL"
-      continue
+      log "npm ci failed at repo root, falling back to npm install"
+      if ! npm install; then
+        log "npm install also failed at repo root, aborting this cycle"
+        sleep "$INTERVAL"
+        continue
+      fi
     fi
   fi
 
   # --- backend npm deps ---
-  if changed_in "$BEFORE" "$AFTER" backend/package.json backend/package-lock.json; then
+  if changed_in "$BEFORE" "$AFTER" backend/package.json backend/package-lock.json || [ ! -d backend/node_modules ]; then
     log "backend dependencies changed, running npm ci in backend/"
     if ! (cd backend && npm ci); then
-      log "npm ci failed in backend/, aborting this cycle"
-      sleep "$INTERVAL"
-      continue
+      log "npm ci failed in backend/, falling back to npm install"
+      if ! (cd backend && npm install); then
+        log "npm install also failed in backend/, aborting this cycle"
+        sleep "$INTERVAL"
+        continue
+      fi
     fi
   fi
 
   # --- frontend rebuild ---
-  # Rebuild only when a file that ends up in dist/ has changed.
-  if changed_in "$BEFORE" "$AFTER" src/ public/ index.html vite.config.ts tsconfig.json package.json package-lock.json; then
+  # Rebuild only when a file that ends up in dist/ has changed, OR dist/ is
+  # missing entirely (first deploy).
+  if [ ! -d dist ] || changed_in "$BEFORE" "$AFTER" src/ public/ index.html vite.config.ts tsconfig.json package.json package-lock.json; then
     log "frontend sources changed, running npm run build"
     if ! npm run build; then
       log "npm run build failed, aborting this cycle"
